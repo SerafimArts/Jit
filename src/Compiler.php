@@ -16,6 +16,7 @@ use Serafim\Jit\Compiler\LLVMVerifierFailureAction;
 use Serafim\Jit\Exception\JitException;
 use Serafim\Jit\Internal\Engine;
 use Serafim\Jit\Internal\Entry;
+use Serafim\Jit\Internal\Error;
 use Serafim\Jit\Target\TargetInterface;
 
 class Compiler
@@ -31,9 +32,9 @@ class Compiler
     private CData $module;
 
     /**
-     * @var CData<"char**">
+     * @var Error
      */
-    private CData $error;
+    private Error $error;
 
     /**
      * @param \FFI $ffi
@@ -41,8 +42,8 @@ class Compiler
     public function __construct(\FFI $ffi)
     {
         $this->llvm = $ffi;
+        $this->error = new Error($this);
 
-        $this->error = \FFI::addr(\FFI::new('char*'));
         $this->module = $this->llvm->new('LLVMModuleRef', false);
 
         // void LLVMLinkInMCJIT(void);
@@ -106,18 +107,6 @@ class Compiler
     }
 
     /**
-     * @param int $status
-     */
-    private function assertError(int $status): void
-    {
-        if ($status !== 0) {
-            $this->llvm->LLVMDisposeMessage($this->error[0]);
-
-            throw new JitException(\FFI::string($this->error[0]));
-        }
-    }
-
-    /**
      * <code>
      *  LLVMMemoryBufferRef LLVMCreateMemoryBufferWithMemoryRangeCopy(
      *      char *InputData,
@@ -151,9 +140,9 @@ class Compiler
     private function loadFile(string $file): CData
     {
         $memory = $this->llvm->new('LLVMMemoryBufferRef');
-        $status = $this->llvm->LLVMCreateMemoryBufferWithContentsOfFile($file, \FFI::addr($memory), $this->error);
 
-        $this->assertError($status);
+        $status = $this->llvm->LLVMCreateMemoryBufferWithContentsOfFile($file, \FFI::addr($memory), $this->error->message);
+        $this->error->assert($status);
 
         return $memory;
     }
@@ -220,18 +209,18 @@ class Compiler
         $context = $this->llvm->LLVMContextCreate();
 
         // LLVMBool LLVMParseIRInContext(LLVMContextRef ContextRef, LLVMMemoryBufferRef MemBuf, LLVMModuleRef *OutM, char **OutMessage);
-        $status = $this->llvm->LLVMParseIRInContext($context, $memory, \FFI::addr($this->module), $this->error);
-        $this->assertError($status);
+        $status = $this->llvm->LLVMParseIRInContext($context, $memory, \FFI::addr($this->module), $this->error->message);
+        $this->error->assert($status);
 
         // LLVMBool LLVMVerifyModule(LLVMModuleRef M, LLVMVerifierFailureAction Action, char **OutMessage);
         $action = LLVMVerifierFailureAction::LLVM_RETURN_STATUS_ACTION;
-        $status = $this->llvm->LLVMVerifyModule($this->module, $action, $this->error);
-        $this->assertError($status);
+        $status = $this->llvm->LLVMVerifyModule($this->module, $action, $this->error->message);
+        $this->error->assert($status);
 
         // LLVMBool LLVMCreateExecutionEngineForModule(LLVMExecutionEngineRef *OutEE, LLVMModuleRef M, char **OutError);
-        $status = $this->llvm->LLVMCreateExecutionEngineForModule(\FFI::addr($engine), $this->module, $this->error);
-        $this->assertError($status);
+        $status = $this->llvm->LLVMCreateExecutionEngineForModule(\FFI::addr($engine), $this->module, $this->error->message);
+        $this->error->assert($status);
 
-        return new Engine($this->llvm, $engine, $context);
+        return new Engine($this->llvm, $this->module, $engine, $context);
     }
 }

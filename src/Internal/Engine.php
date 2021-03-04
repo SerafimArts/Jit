@@ -12,7 +12,10 @@ declare(strict_types=1);
 namespace Serafim\Jit\Internal;
 
 use FFI\CData;
+use JetBrains\PhpStorm\ExpectedValues;
 use JetBrains\PhpStorm\Pure;
+use Serafim\Jit\Compiler\LLVMCodeGenFileType;
+use Serafim\Jit\Exception\JitException;
 
 /**
  * @internal Engine is an internal library class, please do not use it in your code.
@@ -36,15 +39,29 @@ final class Engine
     private CData $context;
 
     /**
+     * @var Error
+     */
+    private Error $error;
+
+    /**
+     * @var CData
+     */
+    private CData $module;
+
+    /**
      * @param \FFI $llvm
+     * @param CData<"LLVMModuleRef"> $module
      * @param CData<"LLVMExecutionEngineRef"> $engine
      * @param CData<"LLVMContextRef"> $context
      */
-    public function __construct(\FFI $llvm, CData $engine, CData $context)
+    public function __construct(\FFI $llvm, CData $module, CData $engine, CData $context)
     {
         $this->llvm = $llvm;
         $this->engine = $engine;
         $this->context = $context;
+
+        $this->error = new Error($llvm);
+        $this->module = $module;
     }
 
     /**
@@ -53,11 +70,32 @@ final class Engine
      * @return string
      */
     #[Pure]
-    private function signature(string $type, array $arguments): string
-    {
+    private function signature(
+        string $type,
+        array $arguments
+    ): string {
         $argumentsString = $arguments === [] ? 'void' : \implode(',', $arguments);
 
         return \sprintf('%s (*)(%s)', $type, $argumentsString);
+    }
+
+    /**
+     * @param string $file
+     * @param int $type
+     */
+    public function build(
+        string $file,
+        #[ExpectedValues(valuesFromClass: LLVMCodeGenFileType::class)]
+        int $type = LLVMCodeGenFileType::LLVM_ASSEMBLY_FILE,
+    ): void {
+        $target = $this->llvm->LLVMGetExecutionEngineTargetMachine($this->engine);
+
+        if ($target === null) {
+            throw new JitException('Compiler target was not installed');
+        }
+
+        $status = $this->llvm->LLVMTargetMachineEmitToFile($target, $this->module, $file, $type, $this->error->message);
+        $this->error->assert($status);
     }
 
     /**
