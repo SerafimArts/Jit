@@ -12,7 +12,10 @@ declare(strict_types=1);
 namespace Serafim\Jit;
 
 use FFI\CData;
+use Serafim\Jit\Compiler\LLVMVerifierFailureAction;
 use Serafim\Jit\Exception\JitException;
+use Serafim\Jit\Internal\Engine;
+use Serafim\Jit\Internal\Entry;
 use Serafim\Jit\Target\TargetInterface;
 
 class Compiler
@@ -52,7 +55,7 @@ class Compiler
      */
     public static function fromLibrary(string $library): self
     {
-        $headers = \file_get_contents(__DIR__ . '/llvm.h');
+        $headers = \file_get_contents(__DIR__ . '/../resources/llvm.h');
 
         return new static(\FFI::cdef($headers, $library));
     }
@@ -156,6 +159,37 @@ class Compiler
     }
 
     /**
+     * @param callable $handler
+     * @return Entry|object
+     * @throws \ReflectionException
+     */
+    public function entry(callable $handler): Entry
+    {
+        $engine = $this->compile($handler());
+
+        return new Entry($engine, $this->getImportFunctions($handler));
+    }
+
+    /**
+     * @param callable|object $handler
+     * @return iterable<ImportFunction>
+     * @throws \ReflectionException
+     */
+    private function getImportFunctions(callable $handler): iterable
+    {
+        $reflection = \is_object($handler) && ! $handler instanceof \Closure
+            ? new \ReflectionObject($handler)
+            : new \ReflectionFunction($handler)
+        ;
+
+        $attributes = $reflection->getAttributes(ImportFunction::class, \ReflectionAttribute::IS_INSTANCEOF);
+
+        foreach ($attributes as $attr) {
+            yield $attr->newInstance();
+        }
+    }
+
+    /**
      * @param string $code
      * @return Engine
      */
@@ -168,7 +202,7 @@ class Compiler
      * @param string $file
      * @return Engine
      */
-    public function compileFile(string $file): Engine
+    public function file(string $file): Engine
     {
         return $this->getExecutionEngine($this->loadFile($file));
     }
@@ -190,7 +224,8 @@ class Compiler
         $this->assertError($status);
 
         // LLVMBool LLVMVerifyModule(LLVMModuleRef M, LLVMVerifierFailureAction Action, char **OutMessage);
-        $status = $this->llvm->LLVMVerifyModule($this->module, 0x02, $this->error);
+        $action = LLVMVerifierFailureAction::LLVM_RETURN_STATUS_ACTION;
+        $status = $this->llvm->LLVMVerifyModule($this->module, $action, $this->error);
         $this->assertError($status);
 
         // LLVMBool LLVMCreateExecutionEngineForModule(LLVMExecutionEngineRef *OutEE, LLVMModuleRef M, char **OutError);
