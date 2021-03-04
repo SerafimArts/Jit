@@ -11,17 +11,17 @@ declare(strict_types=1);
 
 namespace Serafim\Jit\Target;
 
-class X86Target implements TargetInterface
+class AArch64Target implements TargetInterface
 {
     /**
      * @param object $llvm
      */
     public function load(object $llvm): void
     {
-        $llvm->LLVMInitializeX86TargetInfo();
-        $llvm->LLVMInitializeX86Target();
-        $llvm->LLVMInitializeX86TargetMC();
-        $llvm->LLVMInitializeX86AsmParser();
-        $llvm->LLVMInitializeX86AsmPrinter();
+        $llvm->LLVMInitializeAArch64TargetInfo();
+        $llvm->LLVMInitializeAArch64Target();
+        $llvm->LLVMInitializeAArch64TargetMC();
+        $llvm->LLVMInitializeAArch64AsmParser();
+        $llvm->LLVMInitializeAArch64AsmPrinter();
     }
 }

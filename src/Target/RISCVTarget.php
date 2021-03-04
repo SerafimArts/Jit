@@ -11,17 +11,17 @@ declare(strict_types=1);
 
 namespace Serafim\Jit\Target;
 
-class X86Target implements TargetInterface
+class RISCVTarget implements TargetInterface
 {
     /**
      * @param object $llvm
      */
     public function load(object $llvm): void
     {
-        $llvm->LLVMInitializeX86TargetInfo();
-        $llvm->LLVMInitializeX86Target();
-        $llvm->LLVMInitializeX86TargetMC();
-        $llvm->LLVMInitializeX86AsmParser();
-        $llvm->LLVMInitializeX86AsmPrinter();
+        $llvm->LLVMInitializeRISCVTargetInfo();
+        $llvm->LLVMInitializeRISCVTarget();
+        $llvm->LLVMInitializeRISCVTargetMC();
+        $llvm->LLVMInitializeRISCVAsmParser();
+        $llvm->LLVMInitializeRISCVAsmPrinter();
     }
 }
